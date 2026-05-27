@@ -300,22 +300,24 @@
       }
 
       if (state.type === 'electrostatic') {
-        qs('#akf-simple-label').textContent = 'Electrostatic Washable Filters';
-        qs('#akf-simple-desc').textContent = 'Reusable washable HVAC filtration — built to last.';
-        qs('#akf-simple-link').href = '/collections/electrostatic-washable-air-filters';
-        qs('#akf-simple-link').textContent = 'View Electrostatic Filters';
-        showOnly('akf-step-simple');
-        scrollToStep('akf-step-simple');
+        qs('#akf-size-label').textContent = 'Enter Filter Size';
+        var depthWrap = qs('#akf-depth-wrap');
+        depthWrap.innerHTML = '<label>Depth (inches)</label><div class="akf-field-fixed" data-depth-fixed="1">1"</div>';
+        showOnly('akf-step-size');
+        scrollToStep('akf-step-size');
         return;
       }
 
       if (state.type === 'padframe') {
-        qs('#akf-simple-label').textContent = 'Pad & Frame Filters';
-        qs('#akf-simple-desc').textContent = 'Economical pad and frame HVAC filtration systems.';
-        qs('#akf-simple-link').href = '/collections/pad-and-frame-air-filters';
-        qs('#akf-simple-link').textContent = 'View Pad & Frame Filters';
-        showOnly('akf-step-simple');
-        scrollToStep('akf-step-simple');
+        qs('#akf-size-label').textContent = 'Enter Filter Size';
+        var depthWrap = qs('#akf-depth-wrap');
+        depthWrap.innerHTML = '<label for="akf-depth">Depth (inches)</label>'
+          + '<select id="akf-depth">'
+          + '<option value="1">1"</option>'
+          + '<option value="2">2"</option>'
+          + '</select>';
+        showOnly('akf-step-size');
+        scrollToStep('akf-step-size');
         return;
       }
 
@@ -372,6 +374,45 @@
       return;
     }
 
+    // Electrostatic and padframe: call search API directly
+    if (state.type === 'electrostatic' || state.type === 'padframe') {
+      showOnly('akf-step-result');
+      qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Building your filter&hellip;</div>';
+      scrollToStep('akf-step-result');
+
+      var apiUrl =
+        '/apps/akf/search?' +
+        'category=' + category +
+        '&width=' + width +
+        '&length=' + height +
+        '&depth=' + depth;
+
+      fetch(apiUrl)
+        .then(function (res) {
+          if (!res.ok) {
+            qs('#akf-result-inner').innerHTML = renderError('Filter lookup failed.');
+            return;
+          }
+          return res.json();
+        })
+        .then(function (data) {
+          if (!data) return;
+          var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+          if (handle) {
+            var delay = data.product && data.product.created ? 2000 : 0;
+            setTimeout(function () {
+              window.location.href = '/products/' + handle;
+            }, delay);
+            return;
+          }
+          qs('#akf-result-inner').innerHTML = renderError('No product found for that size.');
+        })
+        .catch(function () {
+          qs('#akf-result-inner').innerHTML = renderError('Something went wrong. Please try again.');
+        });
+      return;
+    }
+
     // Standard pleated: call search API, show result inline
     showOnly('akf-step-result');
     qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Finding your filter&hellip;</div>';
@@ -379,9 +420,13 @@
 
     var category = 'merv';
 
-if (state.type === 'practical') {
-  category = 'deeppleat';
-}
+    if (state.type === 'practical') {
+      category = 'deeppleat';
+    } else if (state.type === 'electrostatic') {
+      category = 'electro_perm_washable';
+    } else if (state.type === 'padframe') {
+      category = 'padframe';
+    }
 
 var apiUrl =
   '/apps/akf/search?' +
@@ -406,15 +451,12 @@ fetch(apiUrl)
 
       console.log("AKF Search Response:", data);
 
-      if (data.product && data.product.handle) {
-        window.location.href =
-          '/products/' + data.product.handle;
-        return;
-      }
-
-      if (data.handle) {
-        window.location.href =
-          '/products/' + data.handle;
+      var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+      if (handle) {
+        var delay = data.product && data.product.created ? 2000 : 0;
+        setTimeout(function () {
+          window.location.href = '/products/' + handle;
+        }, delay);
         return;
       }
 
