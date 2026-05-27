@@ -73,6 +73,14 @@ function buildProductOptions(filter: ValidatedFilter) {
       },
     ];
   }
+  if (filter.category === "practical_pleat") {
+    return [
+      {
+        name: "Quantity",
+        values: [{ name: "2-Pack" }],
+      },
+    ];
+  }
   return [
     {
       name: "Quantity",
