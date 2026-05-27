@@ -1,0 +1,37 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "1413cfe62873c6a5e0ff9dbf4cf2d928"
+name = "Any Kind of Filter Builder v2"
+application_url = "https://southwest-yale-wagon-slight.trycloudflare.com"
+embedded = true
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://example.com/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "https://example.com/webhooks/app/scopes_update"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,write_publications"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://any-kind-of-filter-v2.myshopify.com/auth/callback",
+  "https://any-kind-of-filter-v2.myshopify.com/auth/shopify/callback"
+]
+
+[app_proxy]
+url = "https://southwest-yale-wagon-slight.trycloudflare.com"
+subpath = "akf"
+prefix = "apps"
+
+[build]
+automatically_update_urls_on_dev = true

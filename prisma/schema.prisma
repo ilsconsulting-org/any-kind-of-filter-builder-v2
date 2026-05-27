@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                    String   @id
+  shop                  String
+  state                 String
+  isOnline              Boolean
+  scope                 String?
+  expires               DateTime?
+  accessToken           String
+  userId                BigInt?
+  firstName             String?
+  lastName              String?
+  email                 String?
+  accountOwner          Boolean?
+  locale                String?
+  collaborator          Boolean?
+  emailVerified         Boolean?
+  refreshToken          String?
+  refreshTokenExpires   DateTime?
+
+  @@map("session")
+}
+
+model Filter {
+  id          String   @id @default(uuid())
+  name        String
+  width       Int
+  height      Int
+  depth       Int
+  systemType  String
+  mervRating  Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rules       FilterRule[]
+}
+
+model FilterRule {
+  id        String   @id @default(uuid())
+  filterId  String
+  type      String
+  value     String
+  filter    Filter   @relation(fields: [filterId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model PricingSettings {
+  id                   Int      @id @default(1)
+  discountFactor       Float    @default(0.61)
+  subscriptionDiscount Float?   // percent as decimal (ex: 0.10 for 10%)
+  updatedAt            DateTime @updatedAt
+}
