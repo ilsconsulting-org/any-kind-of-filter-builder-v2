@@ -267,7 +267,7 @@ export async function findOrCreateShopifyProduct(
   } else {
     const def = variants.find((v) =>
       v.selectedOptions.some(
-        (o) => o.name === "Quantity" && o.value === "Default",
+        (o) => o.name === "Quantity" && (o.value === "Default" || o.value === "2-Pack"),
       ),
     );
     if (def) {
