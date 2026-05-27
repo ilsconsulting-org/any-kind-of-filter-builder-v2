@@ -399,10 +399,10 @@
           if (!data) return;
           var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
           if (handle) {
-            var delay = data.product && data.product.created ? 2000 : 0;
+            qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Redirecting to your filter&hellip;</div>';
             setTimeout(function () {
               window.location.href = '/products/' + handle;
-            }, delay);
+            }, 3000);
             return;
           }
           qs('#akf-result-inner').innerHTML = renderError('No product found for that size.');
