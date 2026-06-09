@@ -7,12 +7,12 @@
 //   - Vendor is uniformly "Any Kind of Filter"
 //   - Description, tags, SEO are populated per-category
 //   - Hero image is quality-aware for MERV
-//   - For MERV: 12-pack and 6-pack variants (6-pack at half price)
+//   - For MERV: 12-pack and 4-pack variants (4-pack at 1/3 of 12-pack price)
 //   - For static categories: a single Default variant
 //
 // Uses three sequential mutations for reliability:
 //   1. productCreate (with media, description, tags, SEO, productOptions)
-//   2. productVariantsBulkCreate to add the additional 6-pack variant
+//   2. productVariantsBulkCreate to add the additional 4-pack variant
 //      (productCreate auto-creates only one default variant)
 //   3. productVariantsBulkUpdate to set price and SKU on all variants
 //
@@ -69,7 +69,7 @@ function buildProductOptions(filter: ValidatedFilter) {
     return [
       {
         name: "Quantity",
-        values: [{ name: "12-pack" }, { name: "6-pack" }],
+        values: [{ name: "12-pack" }, { name: "4-pack" }],
       },
     ];
   }
@@ -182,16 +182,16 @@ export async function findOrCreateShopifyProduct(
   const product = created.product;
   let variants: VariantNode[] = product.variants.edges.map((e) => e.node);
 
-  // Step 2: For MERV, add the missing 6-pack variant.
+  // Step 2: For MERV, add the missing 4-pack variant.
   // productCreate auto-creates only one default variant from the first
   // option value, so we need a separate call to add the second.
   if (filter.category === "merv") {
-    const has6Pack = variants.some((v) =>
+    const has4Pack = variants.some((v) =>
       v.selectedOptions.some(
-        (o) => o.name === "Quantity" && o.value === "6-pack",
+        (o) => o.name === "Quantity" && o.value === "4-pack",
       ),
     );
-    if (!has6Pack) {
+    if (!has4Pack) {
       const addResponse = await admin.graphql(
         `#graphql
           mutation addSecondVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -208,7 +208,7 @@ export async function findOrCreateShopifyProduct(
             productId: product.id,
             variants: [
               {
-                optionValues: [{ optionName: "Quantity", name: "6-pack" }],
+                optionValues: [{ optionName: "Quantity", name: "4-pack" }],
               },
             ],
           },
@@ -243,9 +243,9 @@ export async function findOrCreateShopifyProduct(
         (o) => o.name === "Quantity" && o.value === "12-pack",
       ),
     );
-    const six = variants.find((v) =>
+    const four = variants.find((v) =>
       v.selectedOptions.some(
-        (o) => o.name === "Quantity" && o.value === "6-pack",
+        (o) => o.name === "Quantity" && o.value === "4-pack",
       ),
     );
     if (twelve) {
@@ -256,12 +256,12 @@ export async function findOrCreateShopifyProduct(
         inventoryItem: { sku, tracked: false },
       });
     }
-    if (six) {
+    if (four) {
       updates.push({
-        id: six.id,
-        price: (price / 2).toFixed(2),
+        id: four.id,
+        price: ((price / 12) * 4).toFixed(2),
         inventoryPolicy: "CONTINUE",
-        inventoryItem: { sku: `${sku}-6pack`, tracked: false },
+        inventoryItem: { sku: `${sku}-4pack`, tracked: false },
       });
     }
   } else {

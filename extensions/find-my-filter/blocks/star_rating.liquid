@@ -76,8 +76,8 @@
   <div class="akf-filter-inner">
 
     <div class="akf-hero">
-      <h2>{{ section.settings.heading }}</h2>
-      <p>{{ section.settings.subheading }}</p>
+      <h2>{{ block.settings.heading }}</h2>
+      <p>{{ block.settings.subheading }}</p>
     </div>
 
     <!-- Step 1: Filter Type -->
@@ -87,8 +87,8 @@
 
         <button class="akf-type-card" data-type="standard">
           <div class="akf-card-img-wrap">
-            {% if section.settings.img_standard %}
-              <img src="{{ section.settings.img_standard | image_url: width: 600 }}" width="600" height="450" alt="Standard Pleated Air Filters" loading="lazy">
+            {% if block.settings.img_standard %}
+              <img src="{{ block.settings.img_standard | image_url: width: 600 }}" width="600" height="450" alt="Standard Pleated Air Filters" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -98,8 +98,8 @@
 
         <button class="akf-type-card" data-type="practical">
           <div class="akf-card-img-wrap">
-            {% if section.settings.img_practical %}
-              <img src="{{ section.settings.img_practical | image_url: width: 600 }}" width="600" height="450" alt="Practical Pleated Air Filters" loading="lazy">
+            {% if block.settings.img_practical %}
+              <img src="{{ block.settings.img_practical | image_url: width: 600 }}" width="600" height="450" alt="Practical Pleated Air Filters" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -109,8 +109,8 @@
 
         <button class="akf-type-card" data-type="electrostatic">
           <div class="akf-card-img-wrap">
-            {% if section.settings.img_electrostatic %}
-              <img src="{{ section.settings.img_electrostatic | image_url: width: 600 }}" width="600" height="450" alt="Electrostatic Washable Air Filters" loading="lazy">
+            {% if block.settings.img_electrostatic %}
+              <img src="{{ block.settings.img_electrostatic | image_url: width: 600 }}" width="600" height="450" alt="Electrostatic Washable Air Filters" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -120,8 +120,8 @@
 
         <button class="akf-type-card" data-type="padframe">
           <div class="akf-card-img-wrap">
-            {% if section.settings.img_padframe %}
-              <img src="{{ section.settings.img_padframe | image_url: width: 600 }}" width="600" height="450" alt="Pad and Frame Air Filters" loading="lazy">
+            {% if block.settings.img_padframe %}
+              <img src="{{ block.settings.img_padframe | image_url: width: 600 }}" width="600" height="450" alt="Pad and Frame Air Filters" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -131,8 +131,8 @@
 
         <button class="akf-type-card" data-type="uv">
           <div class="akf-card-img-wrap">
-            {% if section.settings.img_uv %}
-              <img src="{{ section.settings.img_uv | image_url: width: 600 }}" width="600" height="450" alt="UV Filtration" loading="lazy">
+            {% if block.settings.img_uv %}
+              <img src="{{ block.settings.img_uv | image_url: width: 600 }}" width="600" height="450" alt="UV Filtration" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -150,8 +150,8 @@
 
         <button class="akf-merv-card" data-merv="8">
           <div class="akf-card-img-wrap akf-card-img-wrap--banner">
-            {% if section.settings.img_merv8 %}
-              <img src="{{ section.settings.img_merv8 | image_url: width: 700 }}" width="700" height="306" alt="MERV 8" loading="lazy">
+            {% if block.settings.img_merv8 %}
+              <img src="{{ block.settings.img_merv8 | image_url: width: 700 }}" width="700" height="306" alt="MERV 8" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -161,8 +161,8 @@
 
         <button class="akf-merv-card" data-merv="11">
           <div class="akf-card-img-wrap akf-card-img-wrap--banner">
-            {% if section.settings.img_merv11 %}
-              <img src="{{ section.settings.img_merv11 | image_url: width: 700 }}" width="700" height="306" alt="MERV 11" loading="lazy">
+            {% if block.settings.img_merv11 %}
+              <img src="{{ block.settings.img_merv11 | image_url: width: 700 }}" width="700" height="306" alt="MERV 11" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -172,8 +172,8 @@
 
         <button class="akf-merv-card" data-merv="13">
           <div class="akf-card-img-wrap akf-card-img-wrap--banner">
-            {% if section.settings.img_merv13 %}
-              <img src="{{ section.settings.img_merv13 | image_url: width: 700 }}" width="700" height="306" alt="MERV 13" loading="lazy">
+            {% if block.settings.img_merv13 %}
+              <img src="{{ block.settings.img_merv13 | image_url: width: 700 }}" width="700" height="306" alt="MERV 13" loading="lazy">
             {% else %}
               <div class="akf-card-placeholder"></div>
             {% endif %}
@@ -244,7 +244,7 @@
   function qs(sel) { return root.querySelector(sel); }
   function qsa(sel) { return root.querySelectorAll(sel); }
 
-  var uvUrl = {{ section.settings.uv_url | default: "/collections/uv-light-filtration" | json }};
+  var uvUrl = {{ block.settings.uv_url | default: "/collections/uv-light-filtration" | json }};
 
   var state = { type: null, merv: null };
 
@@ -478,13 +478,13 @@ fetch(apiUrl)
     var mervLabel = mervLabels[merv] || ('MERV ' + merv);
     var dims = data.width + '″ × ' + data.length + '″ × ' + data.depth + '″';
     var twelve = data.variants && data.variants.twelve;
-    var six = data.variants && data.variants.six;
+    var four = data.variants && data.variants.four;
     var tp = twelve ? '$' + parseFloat(twelve.price).toFixed(2) : (data.price ? '$' + parseFloat(data.price).toFixed(2) : '');
-    var sp = six ? '$' + parseFloat(six.price).toFixed(2) : (data.price ? '$' + (parseFloat(data.price) / 2).toFixed(2) : '');
+    var fp = four ? '$' + parseFloat(four.price).toFixed(2) : (data.price ? '$' + (parseFloat(data.price) / 3).toFixed(2) : '');
     var tu = twelve ? '/cart/' + twelve.id + ':1' : '/products/' + data.handle;
-    var su = six ? '/cart/' + six.id + ':1' : '/products/' + data.handle;
+    var fu = four ? '/cart/' + four.id + ':1' : '/products/' + data.handle;
     var tper = twelve ? '$' + (parseFloat(twelve.price) / 12).toFixed(2) + ' per filter' : '';
-    var sper = six ? '$' + (parseFloat(six.price) / 6).toFixed(2) + ' per filter' : '';
+    var fper = four ? '$' + (parseFloat(four.price) / 4).toFixed(2) + ' per filter' : '';
     return '<div class="akf-build-result">'
       + '<p class="akf-build-dims">' + dims + '</p>'
       + '<p class="akf-build-spec">Standard Pleated &bull; ' + mervLabel + '</p>'
@@ -497,10 +497,10 @@ fetch(apiUrl)
       + '<a href="' + tu + '" class="akf-pack-btn">Add to Cart</a>'
       + '</div>'
       + '<div class="akf-pack-card akf-pack-card--alt">'
-      + '<p class="akf-pack-qty">6-Pack</p>'
-      + (sp ? '<p class="akf-pack-price">' + sp + '</p>' : '')
-      + '<p class="akf-pack-per">' + sper + '</p>'
-      + '<a href="' + su + '" class="akf-pack-btn">Add to Cart</a>'
+      + '<p class="akf-pack-qty">4-Pack</p>'
+      + (fp ? '<p class="akf-pack-price">' + fp + '</p>' : '')
+      + '<p class="akf-pack-per">' + fper + '</p>'
+      + '<a href="' + fu + '" class="akf-pack-btn">Add to Cart</a>'
       + '</div>'
       + '</div>'
       + '</div>';

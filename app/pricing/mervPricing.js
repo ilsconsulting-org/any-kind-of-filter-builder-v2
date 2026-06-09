@@ -13,11 +13,11 @@ function normalizeDimensions(length, width) {
 
 /**
  * Calculate base unit cost (pre-pack, pre-discount)
- * (Paste your full getCostMerv function here from the file you uploaded)
- */
-
-/**
- * Public pricing API
+ *
+ * Cost matrix updated January 2026 from FMI price sheet "A" column (dealer cost).
+ * Small = max(width, length) <= 23.5". Large = any dimension > 23.5".
+ * Buckets with no FMI catalog data (custom large cuts ≥800 sq in) retain
+ * prior cost estimates.
  */
 
 function getCostMerv({ length, width, depth, quality }) {
@@ -31,15 +31,16 @@ function getCostMerv({ length, width, depth, quality }) {
   let price = 0;
 
   if (mervCode === "DQPA40") {
+    // Small: both dimensions <= 23.5" (width = larger dim after normalization)
     if (length <= 29.5 && width <= 23.5) {
       if (area >= 36 && area <= 199)
-        price = { 1: 3.18, 2: 3.56, 4: 6.09 }[depth];
+        price = { 1: 3.51, 2: 4.11, 4: 6.09 }[depth];
       else if (area <= 299)
-        price = { 1: 3.45, 2: 4.26, 4: 7.33 }[depth];
+        price = { 1: 3.89, 2: 4.61, 4: 7.33 }[depth];
       else if (area <= 399)
-        price = { 1: 3.96, 2: 5.11, 4: 8.72 }[depth];
+        price = { 1: 4.06, 2: 4.69, 4: 7.02 }[depth];
       else if (area <= 499)
-        price = { 1: 4.39, 2: 5.45, 4: 9.63 }[depth];
+        price = { 1: 3.89, 2: 4.13, 4: 7.32 }[depth];
       else if (area <= 599)
         price = { 1: 4.71, 2: 5.94, 4: 10.19 }[depth];
       else if (area <= 699)
@@ -47,12 +48,13 @@ function getCostMerv({ length, width, depth, quality }) {
       else
         price = { 1: 5.23, 2: 6.64, 4: 11.38 }[depth];
     } else {
+      // Large: any dimension > 23.5"
       if (area <= 399)
-        price = { 1: 6.34, 2: 7.12, 4: 12.19 }[depth];
+        price = { 1: 4.66, 2: 5.62, 4: 6.47 }[depth];
       else if (area <= 599)
-        price = { 1: 6.89, 2: 8.54, 4: 14.64 }[depth];
+        price = { 1: 4.36, 2: 4.81, 4: 8.43 }[depth];
       else if (area <= 799)
-        price = { 1: 7.93, 2: 10.21, 4: 17.45 }[depth];
+        price = { 1: 5.49, 2: 7.73, 4: 17.45 }[depth];
       else if (area <= 999)
         price = { 1: 8.78, 2: 10.91, 4: 19.25 }[depth];
       else if (area <= 1199)
@@ -67,30 +69,30 @@ function getCostMerv({ length, width, depth, quality }) {
   if (mervCode === "MQPA") {
     if (length <= 29.5 && width <= 23.5) {
       if (area <= 199)
-        price = { 1: 4.87, 2: 5.44, 4: 9.31 }[depth];
+        price = { 1: 5.20, 2: 6.22, 4: 9.31 }[depth];
       else if (area <= 299)
-        price = { 1: 5.27, 2: 6.51, 4: 11.19 }[depth];
+        price = { 1: 5.97, 2: 7.32, 4: 11.19 }[depth];
       else if (area <= 399)
-        price = { 1: 6.06, 2: 7.81, 4: 13.33 }[depth];
+        price = { 1: 5.74, 2: 6.49, 4: 11.36 }[depth];
       else if (area <= 499)
-        price = { 1: 6.70, 2: 8.34, 4: 14.71 }[depth];
+        price = { 1: 6.00, 2: 6.67, 4: 12.97 }[depth];
       else if (area <= 599)
         price = { 1: 7.20, 2: 9.08, 4: 15.57 }[depth];
       else if (area <= 699)
         price = { 1: 7.57, 2: 9.61, 4: 16.46 }[depth];
       else
-        price = { 1: 8.0, 2: 10.15, 4: 17.38 }[depth];
+        price = { 1: 8.00, 2: 10.15, 4: 17.38 }[depth];
     } else {
       if (area <= 399)
-        price = { 1: 9.69, 2: 10.88, 4: 18.6 }[depth];
+        price = { 1: 7.35, 2: 7.40, 4: 18.60 }[depth];
       else if (area <= 599)
-        price = { 1: 10.53, 2: 13.05, 4: 22.39 }[depth];
+        price = { 1: 6.72, 2: 7.87, 4: 14.88 }[depth];
       else if (area <= 799)
-        price = { 1: 12.11, 2: 15.62, 4: 26.65 }[depth];
+        price = { 1: 9.67, 2: 11.70, 4: 26.65 }[depth];
       else if (area <= 999)
         price = { 1: 13.42, 2: 16.67, 4: 29.41 }[depth];
       else if (area <= 1199)
-        price = { 1: 14.4, 2: 18.17, 4: 31.15 }[depth];
+        price = { 1: 14.40, 2: 18.17, 4: 31.15 }[depth];
       else if (area <= 1399)
         price = { 1: 15.14, 2: 19.22, 4: 32.93 }[depth];
       else
@@ -101,28 +103,28 @@ function getCostMerv({ length, width, depth, quality }) {
   if (mervCode === "GQPA") {
     if (length <= 29.5 && width <= 23.5) {
       if (area <= 199)
-        price = { 1: 5.84, 2: 7.14, 4: 11.79 }[depth];
+        price = { 1: 6.93, 2: 8.29, 4: 11.79 }[depth];
       else if (area <= 299)
-        price = { 1: 6.33, 2: 8.43, 4: 14.04 }[depth];
+        price = { 1: 7.96, 2: 9.76, 4: 14.04 }[depth];
       else if (area <= 399)
-        price = { 1: 7.27, 2: 9.98, 4: 16.61 }[depth];
+        price = { 1: 7.66, 2: 9.51, 4: 13.36 }[depth];
       else if (area <= 499)
-        price = { 1: 8.05, 2: 10.61, 4: 17.65 }[depth];
+        price = { 1: 8.00, 2: 8.89, 4: 15.26 }[depth];
       else if (area <= 599)
-        price = { 1: 8.64, 2: 11.5, 4: 0 }[depth];
+        price = { 1: 8.64, 2: 11.50, 4: 0 }[depth];
       else if (area <= 699)
         price = { 1: 9.08, 2: 12.15, 4: 0 }[depth];
       else
-        price = { 1: 9.6, 2: 12.79, 4: 0 }[depth];
+        price = { 1: 9.60, 2: 12.79, 4: 0 }[depth];
     } else {
       if (area <= 399)
-        price = { 1: 11.63, 2: 14.28, 4: 23.57 }[depth];
+        price = { 1: 8.83, 2: 9.87, 4: 23.57 }[depth];
       else if (area <= 599)
-        price = { 1: 12.64, 2: 16.88, 4: 28.08 }[depth];
+        price = { 1: 8.96, 2: 10.49, 4: 17.29 }[depth];
       else if (area <= 799)
-        price = { 1: 14.54, 2: 19.96, 4: 33.22 }[depth];
+        price = { 1: 12.90, 2: 14.69, 4: 33.22 }[depth];
       else if (area <= 999)
-        price = { 1: 16.1, 2: 21.23, 4: 36.53 }[depth];
+        price = { 1: 16.10, 2: 21.23, 4: 36.53 }[depth];
       else if (area <= 1199)
         price = { 1: 17.28, 2: 23.01, 4: 38.59 }[depth];
       else if (area <= 1399)
@@ -159,8 +161,8 @@ export async function calculateMervPrice({
 
   if (packSize === 12) {
     finalPrice = retail12;
-  } else if (packSize === 6) {
-    finalPrice = retail12 / 2;
+  } else if (packSize === 4) {
+    finalPrice = (retail12 / 12) * 4;
   } else {
     finalPrice = (retail12 / 12) * packSize;
   }

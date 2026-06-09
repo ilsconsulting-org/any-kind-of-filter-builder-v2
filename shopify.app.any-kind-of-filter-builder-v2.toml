@@ -2,7 +2,7 @@
 
 client_id = "820ca3a4b5d54402edb1864d6f1f7b03"
 name = "Any Kind of Filter Builder v2"
-application_url = "https://example.com"
+application_url = "https://any-kind-of-filter-builder-v2-production.up.railway.app"
 embedded = true
 
 [webhooks]
@@ -15,4 +15,9 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = ["https://any-kind-of-filter-builder-v2-production.up.railway.app/auth/callback"]
+
+[app_proxy]
+url = "https://any-kind-of-filter-builder-v2-production.up.railway.app"
+subpath = "akf"
+prefix = "apps"
