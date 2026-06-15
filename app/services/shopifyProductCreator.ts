@@ -16,9 +16,10 @@
 //      (productCreate auto-creates only one default variant)
 //   3. productVariantsBulkUpdate to set price and SKU on all variants
 //
-// Sales channel publication is deferred until the app has the
-// read_publications scope. Newly-created products will be ACTIVE and
-// visible in admin, then a separate publication step before launch.
+// Publication (Step 4) tries two approaches to support both channel apps
+// and regular apps across Shopify API versions:
+//   a) Root-level `publications` query (works for channel apps & older APIs)
+//   b) Product `resourcePublications` query (works for non-channel apps)
 
 import type { ValidatedFilter } from "../lib/filterValidator";
 import { generateHandle, generateSku, generateTitle } from "../lib/handleGenerator";
@@ -309,34 +310,93 @@ export async function findOrCreateShopifyProduct(
   }
 
   // Step 4: Publish to Online Store channel.
+  //
+  // Strategy A: root-level `publications` query.
+  //   Works for channel apps and non-channel apps on older API versions.
+  //   In Shopify 2026-04, non-channel apps may get an empty list here.
+  //
+  // Strategy B: product `resourcePublications(onlyPublished: false)`.
+  //   Returns every publication the product CAN be published to, regardless
+  //   of app type. Used as fallback when Strategy A yields nothing.
   try {
+    // Strategy A
     const pubResponse = await admin.graphql(
       `#graphql
         query GetPublications {
-          publications(first: 10) {
+          publications(first: 20) {
             edges { node { id name } }
           }
         }`,
     );
     const pubJson = (await pubResponse.json()) as {
       data?: {
-        publications?: {
-          edges: Array<{ node: { id: string; name: string } }>;
-        };
+        publications?: { edges: Array<{ node: { id: string; name: string } }> };
       };
     };
-    const publications =
+    let publications =
       pubJson.data?.publications?.edges?.map((e) => e.node) ?? [];
+
+    console.log(
+      `[publish] Strategy A: publications query returned ${publications.length} result(s):`,
+      JSON.stringify(publications.map((p) => p.name)),
+    );
+
+    // Strategy B — fallback when Strategy A is empty
+    if (publications.length === 0) {
+      const resPubResponse = await admin.graphql(
+        `#graphql
+          query GetProductPublications($id: ID!) {
+            product(id: $id) {
+              resourcePublications(first: 20, onlyPublished: false) {
+                edges {
+                  node {
+                    isPublished
+                    publication { id name }
+                  }
+                }
+              }
+            }
+          }`,
+        { variables: { id: product.id } },
+      );
+      const resPubJson = (await resPubResponse.json()) as {
+        data?: {
+          product?: {
+            resourcePublications?: {
+              edges: Array<{
+                node: {
+                  isPublished: boolean;
+                  publication: { id: string; name: string };
+                };
+              }>;
+            };
+          };
+        };
+      };
+      publications =
+        resPubJson.data?.product?.resourcePublications?.edges?.map(
+          (e) => e.node.publication,
+        ) ?? [];
+      console.log(
+        `[publish] Strategy B: resourcePublications returned ${publications.length} result(s):`,
+        JSON.stringify(publications.map((p) => p.name)),
+      );
+    }
+
     const onlineStore = publications.find(
       (p) =>
         p.name === "Online Store" ||
         p.name.toLowerCase().includes("online store"),
     );
+
     if (onlineStore) {
-      await admin.graphql(
+      const publishResult = await admin.graphql(
         `#graphql
           mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
             publishablePublish(id: $id, input: $input) {
+              publishable {
+                ... on Product { id handle }
+              }
               userErrors { field message }
             }
           }`,
@@ -347,9 +407,34 @@ export async function findOrCreateShopifyProduct(
           },
         },
       );
+      const publishJson = (await publishResult.json()) as {
+        data?: {
+          publishablePublish?: {
+            publishable?: { id: string; handle: string };
+            userErrors: Array<{ field: string[]; message: string }>;
+          };
+        };
+      };
+      const publishErrors =
+        publishJson.data?.publishablePublish?.userErrors ?? [];
+      if (publishErrors.length > 0) {
+        console.error(
+          `[publish] publishablePublish errors for ${handle}:`,
+          JSON.stringify(publishErrors),
+        );
+      } else {
+        console.log(
+          `[publish] Successfully published ${handle} to "${onlineStore.name}"`,
+        );
+      }
+    } else {
+      console.error(
+        `[publish] "Online Store" not found among ${publications.length} available publication(s). ` +
+          `Product ${handle} was created ACTIVE but is NOT published to Online Store.`,
+      );
     }
   } catch (err) {
-    console.error(`[create] Publish failed for ${handle}:`, err);
+    console.error(`[publish] Step 4 threw for ${handle}:`, err);
   }
 
   return {

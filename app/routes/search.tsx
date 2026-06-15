@@ -70,6 +70,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       isSubscription: false,
     });
 
+    // 4-pack price: 1/3 of the 12-pack price, rounded to 2 decimal places.
+    // Only applicable to MERV filters; all other categories have a single variant.
+    const price_4pack =
+      filter.category === "merv" && price != null
+        ? parseFloat(((price / 12) * 4).toFixed(2))
+        : null;
+
     let product = null;
     let productError = null;
 
@@ -92,6 +99,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       depth: filter.depth,
       merv_code: filter.mervCode ?? null,
       price,
+      price_4pack,
       handle,
       product,
       productError,
