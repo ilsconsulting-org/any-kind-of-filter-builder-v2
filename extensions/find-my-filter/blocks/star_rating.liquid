@@ -184,7 +184,7 @@
       </div>
     </div>
 
-    <!-- Step 3: Size Entry (Standard + Practical) -->
+    <!-- Step 3: Size Entry -->
     <div class="akf-step" id="akf-step-size" style="display:none;">
       <p class="akf-step-label" id="akf-size-label">Enter Filter Size</p>
       <div class="akf-size-grid">
@@ -212,22 +212,13 @@
       <p class="akf-error" id="akf-error" style="display:none;">Please fill in all fields before continuing.</p>
     </div>
 
-    <!-- Step 4a: Search Result (Standard + Practical via API) -->
+    <!-- Step 4: Result -->
     <div class="akf-step" id="akf-step-result" style="display:none;">
       <div class="akf-result-card">
         <p class="akf-step-label">Your Custom Filter</p>
         <div id="akf-result-inner">
           <div class="akf-loading">Finding your filter&hellip;</div>
         </div>
-      </div>
-    </div>
-
-    <!-- Step 4b: Simple Result (Electrostatic, Pad & Frame) -->
-    <div class="akf-step" id="akf-step-simple" style="display:none;">
-      <div class="akf-result-card">
-        <p class="akf-step-label" id="akf-simple-label">Filter Type</p>
-        <p id="akf-simple-desc"></p>
-        <a id="akf-simple-link" href="#" class="akf-primary-btn">View Products</a>
       </div>
     </div>
 
@@ -251,14 +242,14 @@
   // ── Show / hide steps ──────────────────────────────────────────────────────
 
   function showOnly(stepId) {
-    ['akf-step-merv', 'akf-step-size', 'akf-step-result', 'akf-step-simple'].forEach(function (id) {
+    ['akf-step-merv', 'akf-step-size', 'akf-step-result'].forEach(function (id) {
       var el = root.querySelector('#' + id);
       if (el) el.style.display = (id === stepId) ? 'block' : 'none';
     });
   }
 
   function hideAll() {
-    ['akf-step-merv', 'akf-step-size', 'akf-step-result', 'akf-step-simple'].forEach(function (id) {
+    ['akf-step-merv', 'akf-step-size', 'akf-step-result'].forEach(function (id) {
       var el = root.querySelector('#' + id);
       if (el) el.style.display = 'none';
     });
@@ -290,10 +281,8 @@
 
       if (state.type === 'practical') {
         qs('#akf-size-label').textContent = 'Enter Filter Size (5" Depth)';
-        // Lock depth to 5 for practical pleated
         var depthWrap = qs('#akf-depth-wrap');
         depthWrap.innerHTML = '<label>Depth (inches)</label><div class="akf-field-fixed">5"</div>';
-        state.merv = 8;
         showOnly('akf-step-size');
         scrollToStep('akf-step-size');
         return;
@@ -333,7 +322,7 @@
       this.classList.add('akf-card--selected');
       state.merv = this.dataset.merv;
 
-      // Restore depth selector in case practical locked it
+      // Restore depth selector for standard pleated
       qs('#akf-depth-wrap').innerHTML = '<label for="akf-depth">Depth (inches)</label>'
         + '<select id="akf-depth">'
         + '<option value="1">1"</option>'
@@ -366,43 +355,22 @@
     }
     qs('#akf-error').style.display = 'none';
 
-    var size = width + 'x' + height + 'x' + depth;
-
-    // Practical pleated goes to deep pleat build route directly
+    // ── Practical Pleated ──────────────────────────────────────────────────
+    // Calls search API with fixed 5" depth, shows price before navigating
     if (state.type === 'practical') {
-      window.location.href = '/apps/akf/build/deeppleat/' + size;
-      return;
-    }
-
-    // Electrostatic and padframe: call search API directly
-    if (state.type === 'electrostatic' || state.type === 'padframe') {
       showOnly('akf-step-result');
-      qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Building your filter&hellip;</div>';
+      qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Finding your filter&hellip;</div>';
       scrollToStep('akf-step-result');
-
-      var apiUrl =
-        '/apps/akf/search?' +
-        'category=' + category +
-        '&width=' + width +
-        '&length=' + height +
-        '&depth=' + depth;
-
-      fetch(apiUrl)
-        .then(function (res) {
-          if (!res.ok) {
+      fetch('/apps/akf/search?category=deeppleat&width=' + width + '&length=' + height + '&depth=5')
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (!data || !data.ok) {
             qs('#akf-result-inner').innerHTML = renderError('Filter lookup failed.');
             return;
           }
-          return res.json();
-        })
-        .then(function (data) {
-          if (!data) return;
           var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
           if (handle) {
-            qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Redirecting to your filter&hellip;</div>';
-            setTimeout(function () {
-              window.location.href = '/products/' + handle;
-            }, 3000);
+            qs('#akf-result-inner').innerHTML = renderResultSingle(data, 'Practical Pleated', '2-Pack');
             return;
           }
           qs('#akf-result-inner').innerHTML = renderError('No product found for that size.');
@@ -413,100 +381,135 @@
       return;
     }
 
-    // Standard pleated: call search API, show result inline
+    // ── Electrostatic & Pad Frame ──────────────────────────────────────────
+    // Calls search API with correct category, shows price before navigating
+    if (state.type === 'electrostatic' || state.type === 'padframe') {
+      showOnly('akf-step-result');
+      qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Building your filter&hellip;</div>';
+      scrollToStep('akf-step-result');
+      var eCat   = state.type === 'electrostatic' ? 'electro_perm_washable' : 'padframe';
+      var eLabel = state.type === 'electrostatic' ? 'Electrostatic Washable' : 'Pad & Frame';
+      fetch('/apps/akf/search?category=' + eCat + '&width=' + width + '&length=' + height + '&depth=' + depth)
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (data) {
+          if (!data || !data.ok) {
+            qs('#akf-result-inner').innerHTML = renderError('Filter lookup failed.');
+            return;
+          }
+          var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+          if (handle) {
+            qs('#akf-result-inner').innerHTML = renderResultSingle(data, eLabel, 'Single');
+            return;
+          }
+          qs('#akf-result-inner').innerHTML = renderError('No product found for that size.');
+        })
+        .catch(function () {
+          qs('#akf-result-inner').innerHTML = renderError('Something went wrong. Please try again.');
+        });
+      return;
+    }
+
+    // ── Standard Pleated (MERV) ────────────────────────────────────────────
+    // Calls search API, shows 12-pack and 4-pack price cards
     showOnly('akf-step-result');
     qs('#akf-result-inner').innerHTML = '<div class="akf-loading">Finding your filter&hellip;</div>';
     scrollToStep('akf-step-result');
 
-    var category = 'merv';
+    var apiUrl =
+      '/apps/akf/search?' +
+      'category=merv' +
+      '&quality=' + state.merv +
+      '&width=' + width +
+      '&length=' + height +
+      '&depth=' + depth;
 
-    if (state.type === 'practical') {
-      category = 'deeppleat';
-    } else if (state.type === 'electrostatic') {
-      category = 'electro_perm_washable';
-    } else if (state.type === 'padframe') {
-      category = 'padframe';
-    }
+    fetch(apiUrl)
+      .then(function (res) {
+        if (!res.ok) {
+          qs('#akf-result-inner').innerHTML = renderError('Filter lookup failed.');
+          console.error('HTTP error', res.status);
+          return;
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data) return;
 
-var apiUrl =
-  '/apps/akf/search?' +
-  'category=' + category +
-  '&quality=' + state.merv +
-  '&width=' + width +
-  '&length=' + height +
-  '&depth=' + depth;
+        console.log('AKF Search Response:', data);
 
-fetch(apiUrl)
-    .then(function (res) {
-      if (!res.ok) {
-        qs('#akf-result-inner').innerHTML =
-          renderError('Filter lookup failed.');
-        console.error('HTTP error', res.status);
-        return;
-      }
-      return res.json();
-    })
-    .then(function (data) {
-      if (!data) return;
+        var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+        if (handle) {
+          qs('#akf-result-inner').innerHTML = renderResult(data, state.merv);
+          return;
+        }
 
-      console.log("AKF Search Response:", data);
-
-      var handle = (data.product && data.product.handle) ? data.product.handle : data.handle;
-      if (handle) {
-        var delay = data.product && data.product.created ? 2000 : 0;
-        setTimeout(function () {
-          window.location.href = '/products/' + handle;
-        }, delay);
-        return;
-      }
-
-      qs('#akf-result-inner').innerHTML =
-        renderError('No product handle returned.');
-
-      console.error(data);
-    })
-    .catch(function () {
-      qs('#akf-result-inner').innerHTML = renderError('Something went wrong. Please try again or contact us for help.');
-    });
+        qs('#akf-result-inner').innerHTML = renderError('No product handle returned.');
+        console.error(data);
+      })
+      .catch(function () {
+        qs('#akf-result-inner').innerHTML = renderError('Something went wrong. Please try again or contact us for help.');
+      });
 
   });
 
   // ── Result Templates ───────────────────────────────────────────────────────
 
+  // Standard Pleated (MERV): shows 12-pack and 4-pack price cards
   function renderResult(data, merv) {
-    var mervLabels = {'8': 'MERV 8', '11': 'MERV 11', '13': 'MERV 13'};
-    var mervLabel = mervLabels[merv] || ('MERV ' + merv);
-    var dims = data.width + '″ × ' + data.length + '″ × ' + data.depth + '″';
-    var twelve = data.variants && data.variants.twelve;
-    var four = data.variants && data.variants.four;
-    var tp = twelve ? '$' + parseFloat(twelve.price).toFixed(2) : (data.price ? '$' + parseFloat(data.price).toFixed(2) : '');
-    var fp = four ? '$' + parseFloat(four.price).toFixed(2) : (data.price ? '$' + (parseFloat(data.price) / 3).toFixed(2) : '');
-    var tu = twelve ? '/cart/' + twelve.id + ':1' : '/products/' + data.handle;
-    var fu = four ? '/cart/' + four.id + ':1' : '/products/' + data.handle;
+    var mervLabels = { '8': 'MERV 8', '11': 'MERV 11', '13': 'MERV 13' };
+    var mervLabel  = mervLabels[merv] || ('MERV ' + merv);
+    var dims       = data.width + '″ × ' + data.length + '″ × ' + data.depth + '″';
+    var twelve     = data.variants && data.variants.twelve;
+    var four       = data.variants && data.variants.four;
+    var tp   = twelve ? '$' + parseFloat(twelve.price).toFixed(2)              : (data.price ? '$' + parseFloat(data.price).toFixed(2)             : '');
+    var fp   = four   ? '$' + parseFloat(four.price).toFixed(2)                : (data.price ? '$' + (parseFloat(data.price) / 3).toFixed(2)        : '');
     var tper = twelve ? '$' + (parseFloat(twelve.price) / 12).toFixed(2) + ' per filter' : '';
-    var fper = four ? '$' + (parseFloat(four.price) / 4).toFixed(2) + ' per filter' : '';
+    var fper = four   ? '$' + (parseFloat(four.price)  /  4).toFixed(2) + ' per filter' : '';
+    var productHandle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+    var tu = twelve ? '/cart/' + twelve.id + ':1' : '/products/' + productHandle;
+    var fu = four   ? '/cart/' + four.id   + ':1' : '/products/' + productHandle;
     return '<div class="akf-build-result">'
-      + '<p class="akf-build-dims">' + dims + '</p>'
+      + '<p class="akf-build-dims">'  + dims + '</p>'
       + '<p class="akf-build-spec">Standard Pleated &bull; ' + mervLabel + '</p>'
       + '<p class="akf-build-note">Custom cut to your exact dimensions. Ships within 1&ndash;3 business days.</p>'
       + '<div class="akf-pack-options">'
       + '<div class="akf-pack-card">'
       + '<p class="akf-pack-qty">12-Pack</p>'
-      + (tp ? '<p class="akf-pack-price">' + tp + '</p>' : '')
-      + '<p class="akf-pack-per">' + tper + '</p>'
-      + '<a href="' + tu + '" class="akf-pack-btn">Add to Cart</a>'
+      + (tp   ? '<p class="akf-pack-price">' + tp   + '</p>' : '')
+      + '<p class="akf-pack-per">'  + tper + '</p>'
+      + '<a href="' + tu + '" class="akf-pack-btn">Select</a>'
       + '</div>'
       + '<div class="akf-pack-card akf-pack-card--alt">'
       + '<p class="akf-pack-qty">4-Pack</p>'
-      + (fp ? '<p class="akf-pack-price">' + fp + '</p>' : '')
-      + '<p class="akf-pack-per">' + fper + '</p>'
-      + '<a href="' + fu + '" class="akf-pack-btn">Add to Cart</a>'
+      + (fp   ? '<p class="akf-pack-price">' + fp   + '</p>' : '')
+      + '<p class="akf-pack-per">'  + fper + '</p>'
+      + '<a href="' + fu + '" class="akf-pack-btn">Select</a>'
       + '</div>'
       + '</div>'
       + '</div>';
   }
 
-    function renderError(msg) {
+  // Single-variant result: Practical Pleated, Electrostatic, Pad & Frame
+  function renderResultSingle(data, typeLabel, packLabel) {
+    var dims          = data.width + '″ × ' + data.length + '″ × ' + data.depth + '″';
+    var price         = data.price ? '$' + parseFloat(data.price).toFixed(2) : '';
+    var productHandle = (data.product && data.product.handle) ? data.product.handle : data.handle;
+    var url           = productHandle ? '/products/' + productHandle : '#';
+    return '<div class="akf-build-result">'
+      + '<p class="akf-build-dims">' + dims + '</p>'
+      + '<p class="akf-build-spec">' + typeLabel + '</p>'
+      + '<p class="akf-build-note">Custom cut to your exact dimensions. Ships within 1&ndash;3 business days.</p>'
+      + '<div class="akf-pack-options" style="grid-template-columns:1fr;max-width:220px;">'
+      + '<div class="akf-pack-card">'
+      + '<p class="akf-pack-qty">' + packLabel + '</p>'
+      + (price ? '<p class="akf-pack-price">' + price + '</p>' : '')
+      + '<a href="' + url + '" class="akf-pack-btn">View Product</a>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function renderError(msg) {
     return '<p class="akf-error-msg">' + msg + '</p>'
       + '<button class="akf-secondary-btn" onclick="window.location.reload()">Start Over</button>';
   }
@@ -799,34 +802,26 @@ fetch(apiUrl)
   padding: 8px 0;
 }
 
-.akf-result-spec {
+.akf-build-dims {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 6px;
+  letter-spacing: -.01em;
+}
+
+.akf-build-spec {
   font-size: 13px;
   color: rgba(255,255,255,.5);
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   text-transform: uppercase;
   letter-spacing: .06em;
 }
 
-.akf-result-price {
-  font-size: 42px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -.02em;
-  margin: 0 0 24px;
-  line-height: 1;
-}
-
-.akf-result-note {
+.akf-build-note {
   font-size: 13px;
   color: rgba(255,255,255,.35);
-  margin: 14px 0 0;
-}
-
-/* ── Simple Result ───────────────────────────────────────────────────────── */
-#akf-simple-desc {
-  color: rgba(255,255,255,.65);
-  font-size: 15px;
-  margin: 0 0 24px;
+  margin: 0 0 4px;
 }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
@@ -842,7 +837,6 @@ fetch(apiUrl)
   .akf-size-grid { grid-template-columns: 1fr; max-width: 100%; }
   .akf-hero h2 { font-size: 34px; }
   .akf-hero p { font-size: 15px; }
-  .akf-result-price { font-size: 32px; }
   .akf-result-card { padding: 28px 24px; }
 }
 
@@ -919,5 +913,4 @@ fetch(apiUrl)
 .akf-pack-card--alt .akf-pack-btn:hover {
   background: rgba(255,255,255,.14);
 }
-
 </style>
