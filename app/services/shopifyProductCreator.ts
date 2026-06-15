@@ -65,6 +65,133 @@ async function findProductByHandle(
   return json.data?.products?.edges?.[0]?.node ?? null;
 }
 
+/**
+ * Publishes a product to Online Store using two strategies:
+ *   A) Root-level `publications` query (channel apps / older API versions)
+ *   B) Product `resourcePublications` fallback (non-channel apps in 2026-04+)
+ * Called for both newly created products and existing unpublished products.
+ */
+async function publishProductToOnlineStore(
+  admin: AdminGraphqlClient,
+  productId: string,
+  handle: string,
+): Promise<void> {
+  // Strategy A: root-level publications query
+  const pubResponse = await admin.graphql(
+    `#graphql
+      query GetPublications {
+        publications(first: 20) {
+          edges { node { id name } }
+        }
+      }`,
+  );
+  const pubJson = (await pubResponse.json()) as {
+    data?: {
+      publications?: { edges: Array<{ node: { id: string; name: string } }> };
+    };
+  };
+  let publications =
+    pubJson.data?.publications?.edges?.map((e) => e.node) ?? [];
+
+  console.log(
+    `[publish] Strategy A: publications query returned ${publications.length} result(s):`,
+    JSON.stringify(publications.map((p) => p.name)),
+  );
+
+  // Strategy B: fallback via product's resourcePublications
+  if (publications.length === 0) {
+    const resPubResponse = await admin.graphql(
+      `#graphql
+        query GetProductPublications($id: ID!) {
+          product(id: $id) {
+            resourcePublications(first: 20, onlyPublished: false) {
+              edges {
+                node {
+                  isPublished
+                  publication { id name }
+                }
+              }
+            }
+          }
+        }`,
+      { variables: { id: productId } },
+    );
+    const resPubJson = (await resPubResponse.json()) as {
+      data?: {
+        product?: {
+          resourcePublications?: {
+            edges: Array<{
+              node: {
+                isPublished: boolean;
+                publication: { id: string; name: string };
+              };
+            }>;
+          };
+        };
+      };
+    };
+    publications =
+      resPubJson.data?.product?.resourcePublications?.edges?.map(
+        (e) => e.node.publication,
+      ) ?? [];
+    console.log(
+      `[publish] Strategy B: resourcePublications returned ${publications.length} result(s):`,
+      JSON.stringify(publications.map((p) => p.name)),
+    );
+  }
+
+  const onlineStore = publications.find(
+    (p) =>
+      p.name === "Online Store" ||
+      p.name.toLowerCase().includes("online store"),
+  );
+
+  if (onlineStore) {
+    const publishResult = await admin.graphql(
+      `#graphql
+        mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
+          publishablePublish(id: $id, input: $input) {
+            publishable {
+              ... on Product { id handle }
+            }
+            userErrors { field message }
+          }
+        }`,
+      {
+        variables: {
+          id: productId,
+          input: [{ publicationId: onlineStore.id }],
+        },
+      },
+    );
+    const publishJson = (await publishResult.json()) as {
+      data?: {
+        publishablePublish?: {
+          publishable?: { id: string; handle: string };
+          userErrors: Array<{ field: string[]; message: string }>;
+        };
+      };
+    };
+    const publishErrors =
+      publishJson.data?.publishablePublish?.userErrors ?? [];
+    if (publishErrors.length > 0) {
+      console.error(
+        `[publish] publishablePublish errors for ${handle}:`,
+        JSON.stringify(publishErrors),
+      );
+    } else {
+      console.log(
+        `[publish] Successfully published ${handle} to "${onlineStore.name}"`,
+      );
+    }
+  } else {
+    console.error(
+      `[publish] "Online Store" not found among ${publications.length} available publication(s). ` +
+        `Product ${handle} is NOT published to Online Store.`,
+    );
+  }
+}
+
 function buildProductOptions(filter: ValidatedFilter) {
   if (filter.category === "merv") {
     return [
@@ -99,6 +226,13 @@ export async function findOrCreateShopifyProduct(
 
   const existing = await findProductByHandle(admin, handle);
   if (existing) {
+    // Ensure the existing product is published — it may have been created
+    // before the publication step was working, or publication may have failed.
+    try {
+      await publishProductToOnlineStore(admin, existing.id, handle);
+    } catch (err) {
+      console.error(`[publish] Publish-on-find failed for ${handle}:`, err);
+    }
     return { id: existing.id, handle: existing.handle, created: false };
   }
 
@@ -310,129 +444,8 @@ export async function findOrCreateShopifyProduct(
   }
 
   // Step 4: Publish to Online Store channel.
-  //
-  // Strategy A: root-level `publications` query.
-  //   Works for channel apps and non-channel apps on older API versions.
-  //   In Shopify 2026-04, non-channel apps may get an empty list here.
-  //
-  // Strategy B: product `resourcePublications(onlyPublished: false)`.
-  //   Returns every publication the product CAN be published to, regardless
-  //   of app type. Used as fallback when Strategy A yields nothing.
   try {
-    // Strategy A
-    const pubResponse = await admin.graphql(
-      `#graphql
-        query GetPublications {
-          publications(first: 20) {
-            edges { node { id name } }
-          }
-        }`,
-    );
-    const pubJson = (await pubResponse.json()) as {
-      data?: {
-        publications?: { edges: Array<{ node: { id: string; name: string } }> };
-      };
-    };
-    let publications =
-      pubJson.data?.publications?.edges?.map((e) => e.node) ?? [];
-
-    console.log(
-      `[publish] Strategy A: publications query returned ${publications.length} result(s):`,
-      JSON.stringify(publications.map((p) => p.name)),
-    );
-
-    // Strategy B — fallback when Strategy A is empty
-    if (publications.length === 0) {
-      const resPubResponse = await admin.graphql(
-        `#graphql
-          query GetProductPublications($id: ID!) {
-            product(id: $id) {
-              resourcePublications(first: 20, onlyPublished: false) {
-                edges {
-                  node {
-                    isPublished
-                    publication { id name }
-                  }
-                }
-              }
-            }
-          }`,
-        { variables: { id: product.id } },
-      );
-      const resPubJson = (await resPubResponse.json()) as {
-        data?: {
-          product?: {
-            resourcePublications?: {
-              edges: Array<{
-                node: {
-                  isPublished: boolean;
-                  publication: { id: string; name: string };
-                };
-              }>;
-            };
-          };
-        };
-      };
-      publications =
-        resPubJson.data?.product?.resourcePublications?.edges?.map(
-          (e) => e.node.publication,
-        ) ?? [];
-      console.log(
-        `[publish] Strategy B: resourcePublications returned ${publications.length} result(s):`,
-        JSON.stringify(publications.map((p) => p.name)),
-      );
-    }
-
-    const onlineStore = publications.find(
-      (p) =>
-        p.name === "Online Store" ||
-        p.name.toLowerCase().includes("online store"),
-    );
-
-    if (onlineStore) {
-      const publishResult = await admin.graphql(
-        `#graphql
-          mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
-            publishablePublish(id: $id, input: $input) {
-              publishable {
-                ... on Product { id handle }
-              }
-              userErrors { field message }
-            }
-          }`,
-        {
-          variables: {
-            id: product.id,
-            input: [{ publicationId: onlineStore.id }],
-          },
-        },
-      );
-      const publishJson = (await publishResult.json()) as {
-        data?: {
-          publishablePublish?: {
-            publishable?: { id: string; handle: string };
-            userErrors: Array<{ field: string[]; message: string }>;
-          };
-        };
-      };
-      const publishErrors =
-        publishJson.data?.publishablePublish?.userErrors ?? [];
-      if (publishErrors.length > 0) {
-        console.error(
-          `[publish] publishablePublish errors for ${handle}:`,
-          JSON.stringify(publishErrors),
-        );
-      } else {
-        console.log(
-          `[publish] Successfully published ${handle} to "${onlineStore.name}"`,
-        );
-      }
-    } else {
-      console.error(
-        `[publish] "Online Store" not found among ${publications.length} available publication(s). ` +
-          `Product ${handle} was created ACTIVE but is NOT published to Online Store.`,
-      );
-    }
+    await publishProductToOnlineStore(admin, product.id, handle);
   } catch (err) {
     console.error(`[publish] Step 4 threw for ${handle}:`, err);
   }
