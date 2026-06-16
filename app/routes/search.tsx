@@ -22,7 +22,6 @@ function int(value: string | null): number | null {
 
 function formatErr(err: unknown) {
   const e = err as Error & { stack?: string };
-
   return {
     name: e?.name ?? null,
     message: e?.message ?? String(err),
@@ -30,15 +29,48 @@ function formatErr(err: unknown) {
   };
 }
 
+/**
+ * Fallback admin client using a stored access token.
+ * Used when authenticate.public.appProxy returns admin: null
+ * (i.e., no offline session exists in the database).
+ */
+function createFallbackAdmin(
+  accessToken: string,
+  shopDomain: string,
+): AdminGraphqlClient {
+  return {
+    graphql: async (
+      query: string,
+      options?: { variables?: Record<string, unknown> },
+    ) => {
+      return fetch(
+        `https://${shopDomain}/admin/api/2025-10/graphql.json`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": accessToken,
+          },
+          body: JSON.stringify({
+            query,
+            variables: options?.variables,
+          }),
+        },
+      );
+    },
+  };
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    const { admin } = await authenticate.public.appProxy(request);
+    const { admin: proxyAdmin } = await authenticate.public.appProxy(request);
 
     const url = new URL(request.url);
     const params = url.searchParams;
 
     const rawCategory = params.get("category");
-    const category = rawCategory === "deeppleat" ? "practical_pleat" : rawCategory;
+    const category =
+      rawCategory === "deeppleat" ? "practical_pleat" : rawCategory;
 
     const validation = validateFilter({
       category,
@@ -57,7 +89,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     const filter = validation.data;
-
     const handle = generateHandle(filter);
 
     const price = await calculatePrice({
@@ -80,13 +111,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
     let product = null;
     let productError = null;
 
+    // Use proxy admin if available; fall back to stored access token when
+    // no offline session exists (token exchange not yet completed).
+    let admin: AdminGraphqlClient | null =
+      proxyAdmin as AdminGraphqlClient | null;
+
+    if (!admin && process.env.SHOPIFY_ACCESS_TOKEN) {
+      const shopDomain =
+        params.get("shop") ?? "any-kinf-of-filter-v2-dev.myshopify.com";
+      console.log(
+        `[search] proxy admin null — using fallback token for ${shopDomain}`,
+      );
+      admin = createFallbackAdmin(
+        process.env.SHOPIFY_ACCESS_TOKEN,
+        shopDomain,
+      );
+    }
+
     if (price != null && admin) {
       try {
-        product = await findOrCreateShopifyProduct(
-          admin as AdminGraphqlClient,
-          filter,
-          price,
-        );
+        product = await findOrCreateShopifyProduct(admin, filter, price);
       } catch (err) {
         productError = formatErr(err);
       }
