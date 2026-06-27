@@ -147,6 +147,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       handle,
       product,
       productError,
+      // Exposed at top level for the filter-builder liquid template.
+      // twelve.id / four.id are Shopify GIDs; numericId() in the liquid
+      // strips the prefix for use in ?variant= URL params.
+      variants: product?.variants ?? null,
     });
   } catch (err) {
     return Response.json({
