@@ -1,4 +1,4 @@
-// app/services/shopifyProductCreator.ts
+// app/services/shopifyProductCreator.ts — UPDATED
 //
 // Creates or links Shopify products on demand for a given filter spec.
 //
@@ -8,6 +8,13 @@
 //   - Description, tags, SEO are populated per-category
 //   - Hero image is quality-aware for MERV
 //   - For MERV: 12-pack and 4-pack variants (4-pack at 1/3 of 12-pack price)
+//
+// Changes in this version:
+//   - ProductResult now includes a `variants` map with IDs and prices
+//   - findProductByHandle fetches variant data including price
+//   - Existing MERV products that lack a "4-pack" variant get one added
+//     automatically (lazy migration of legacy catalog products)
+//   - Both new and existing product paths return variant data
 //   - For static categories: a single Default variant
 //
 // Uses three sequential mutations for reliability:
@@ -33,33 +40,64 @@ export interface AdminGraphqlClient {
   ) => Promise<Response>;
 }
 
+export interface VariantResult {
+  id: string;
+  price: string;
+}
+
 export interface ProductResult {
   id: string;
   handle: string;
   created: boolean;
+  variants?: {
+    twelve?: VariantResult;
+    four?: VariantResult;
+    single?: VariantResult;
+  };
 }
 
 interface VariantNode {
   id: string;
+  price?: string;
   selectedOptions: Array<{ name: string; value: string }>;
+}
+
+interface ProductWithVariants {
+  id: string;
+  handle: string;
+  variants: { edges: Array<{ node: VariantNode }> };
 }
 
 async function findProductByHandle(
   admin: AdminGraphqlClient,
   handle: string,
-): Promise<{ id: string; handle: string } | null> {
+): Promise<ProductWithVariants | null> {
   const response = await admin.graphql(
     `#graphql
       query findByHandle($query: String!) {
         products(first: 1, query: $query) {
-          edges { node { id handle } }
+          edges {
+            node {
+              id
+              handle
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    price
+                    selectedOptions { name value }
+                  }
+                }
+              }
+            }
+          }
         }
       }`,
     { variables: { query: `handle:${handle}` } },
   );
   const json = (await response.json()) as {
     data?: {
-      products?: { edges: Array<{ node: { id: string; handle: string } }> };
+      products?: { edges: Array<{ node: ProductWithVariants }> };
     };
   };
   return json.data?.products?.edges?.[0]?.node ?? null;
@@ -226,14 +264,128 @@ export async function findOrCreateShopifyProduct(
 
   const existing = await findProductByHandle(admin, handle);
   if (existing) {
-    // Ensure the existing product is published — it may have been created
-    // before the publication step was working, or publication may have failed.
+    // Ensure the existing product is published.
     try {
       await publishProductToOnlineStore(admin, existing.id, handle);
     } catch (err) {
       console.error(`[publish] Publish-on-find failed for ${handle}:`, err);
     }
-    return { id: existing.id, handle: existing.handle, created: false };
+
+    // Normalise variant structure and build the variants map for the API response.
+    // Legacy catalog products may have "6-pack" or other pack sizes instead of
+    // "4-pack". When a 12-pack exists but no 4-pack, we add one at 1/3 of the
+    // 12-pack price. This lazily migrates existing products without touching
+    // any other variants or disrupting the rest of the product listing.
+    let existingVariants = existing.variants.edges.map((e) => e.node);
+    const variantsResult: ProductResult["variants"] = {};
+
+    if (filter.category === "merv") {
+      // Match by value only — existing catalog products may use a different
+      // option name than "Quantity" (e.g. "Pack Size", "Size", etc.).
+      // We detect the actual option name from the first variant so the
+      // productVariantsBulkCreate mutation uses the correct optionName.
+      const packOptionName =
+        existingVariants[0]?.selectedOptions[0]?.name ?? "Quantity";
+      console.log(
+        `[existing] Pack option name for ${handle}: "${packOptionName}"`,
+        `| variants:`,
+        JSON.stringify(
+          existingVariants.map((v) => v.selectedOptions.map((o) => `${o.name}=${o.value}`)),
+        ),
+      );
+
+      const twelve = existingVariants.find((v) =>
+        v.selectedOptions.some((o) => o.value === "12-pack"),
+      );
+      let four = existingVariants.find((v) =>
+        v.selectedOptions.some((o) => o.value === "4-pack"),
+      );
+
+      if (twelve && !four) {
+        const basePriceNum = parseFloat(twelve.price ?? String(price));
+        const fourPrice = ((basePriceNum / 12) * 4).toFixed(2);
+        console.log(
+          `[existing] Adding 4-pack variant to ${handle} at $${fourPrice} using optionName="${packOptionName}"`,
+        );
+        const addResp = await admin.graphql(
+          `#graphql
+            mutation addFourPack($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+              productVariantsBulkCreate(productId: $productId, variants: $variants) {
+                productVariants {
+                  id
+                  price
+                  selectedOptions { name value }
+                }
+                userErrors { field message }
+              }
+            }`,
+          {
+            variables: {
+              productId: existing.id,
+              variants: [
+                {
+                  optionValues: [{ optionName: packOptionName, name: "4-pack" }],
+                  price: fourPrice,
+                  inventoryPolicy: "CONTINUE",
+                },
+              ],
+            },
+          },
+        );
+        const addJson = (await addResp.json()) as {
+          data?: {
+            productVariantsBulkCreate?: {
+              productVariants: VariantNode[];
+              userErrors: Array<{ field: string[]; message: string }>;
+            };
+          };
+        };
+        const addResult = addJson.data?.productVariantsBulkCreate;
+        const addErrs = addResult?.userErrors ?? [];
+        if (addErrs.length > 0) {
+          console.error(
+            `[existing] Add 4-pack errors for ${handle}:`,
+            JSON.stringify(addErrs),
+          );
+        } else if (addResult?.productVariants?.length) {
+          existingVariants = [...existingVariants, ...addResult.productVariants];
+          four = addResult.productVariants.find((v) =>
+            v.selectedOptions.some((o) => o.value === "4-pack"),
+          );
+        }
+      }
+
+      const finalTwelve = existingVariants.find((v) =>
+        v.selectedOptions.some((o) => o.value === "12-pack"),
+      );
+      const finalFour = existingVariants.find((v) =>
+        v.selectedOptions.some((o) => o.value === "4-pack"),
+      );
+      if (finalTwelve) {
+        variantsResult.twelve = {
+          id: finalTwelve.id,
+          price: finalTwelve.price ?? "0",
+        };
+      }
+      if (finalFour) {
+        variantsResult.four = {
+          id: finalFour.id,
+          price: finalFour.price ?? "0",
+        };
+      }
+    } else {
+      const single = existingVariants[0];
+      if (single) {
+        variantsResult.single = { id: single.id, price: single.price ?? "0" };
+      }
+    }
+
+    return {
+      id: existing.id,
+      handle: existing.handle,
+      created: false,
+      variants: variantsResult,
+    };
   }
 
   const title = generateTitle(filter);
@@ -278,6 +430,7 @@ export async function findOrCreateShopifyProduct(
               edges {
                 node {
                   id
+                  price
                   selectedOptions { name value }
                 }
               }
@@ -333,6 +486,7 @@ export async function findOrCreateShopifyProduct(
             productVariantsBulkCreate(productId: $productId, variants: $variants) {
               productVariants {
                 id
+                price
                 selectedOptions { name value }
               }
               userErrors { field message }
@@ -450,9 +604,39 @@ export async function findOrCreateShopifyProduct(
     console.error(`[publish] Step 4 threw for ${handle}:`, err);
   }
 
+  // Build variant map for the API response.
+  const createdVariants: ProductResult["variants"] = {};
+  if (filter.category === "merv") {
+    const finalTwelve = variants.find((v) =>
+      v.selectedOptions.some(
+        (o) => o.name === "Quantity" && o.value === "12-pack",
+      ),
+    );
+    const finalFour = variants.find((v) =>
+      v.selectedOptions.some(
+        (o) => o.name === "Quantity" && o.value === "4-pack",
+      ),
+    );
+    if (finalTwelve) {
+      createdVariants.twelve = { id: finalTwelve.id, price: price.toFixed(2) };
+    }
+    if (finalFour) {
+      createdVariants.four = {
+        id: finalFour.id,
+        price: ((price / 12) * 4).toFixed(2),
+      };
+    }
+  } else {
+    const single = variants[0];
+    if (single) {
+      createdVariants.single = { id: single.id, price: price.toFixed(2) };
+    }
+  }
+
   return {
     id: product.id,
     handle: product.handle,
     created: true,
+    variants: createdVariants,
   };
 }
