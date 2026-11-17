@@ -32,7 +32,6 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { calculatePrice } from "../pricing/pricingEngine";
 import { validateFilter } from "../lib/filterValidator";
-import { generateHandle } from "../lib/handleGenerator";
 
 type Category =
   | "merv"
@@ -70,7 +69,23 @@ interface Flag {
   reason: string;
 }
 
-const DIMS_RE = /([\d.]+)"\s*x\s*([\d.]+)"\s*x\s*([\d.]+)"/i;
+// A dimension is a decimal ("20.5"), a fraction ("3/4"), or a mixed number ("6 1/8").
+const NUM = String.raw`(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)`;
+const DIMS_RE = new RegExp(String.raw`${NUM}"\s*x\s*${NUM}"\s*x\s*${NUM}"`, "i");
+
+function parseDim(raw: string): number {
+  const parts = raw.trim().split(/\s+/);
+  let total = 0;
+  for (const part of parts) {
+    if (part.includes("/")) {
+      const [n, d] = part.split("/").map(Number);
+      total += n / d;
+    } else {
+      total += parseFloat(part);
+    }
+  }
+  return total;
+}
 
 function parseTitle(title: string): {
   category: Category;
@@ -81,9 +96,9 @@ function parseTitle(title: string): {
 } | null {
   const dims = title.match(DIMS_RE);
   if (!dims) return null;
-  const length = parseFloat(dims[1]);
-  const width = parseFloat(dims[2]);
-  const depth = parseFloat(dims[3]);
+  const length = parseDim(dims[1]);
+  const width = parseDim(dims[2]);
+  const depth = parseDim(dims[3]);
 
   const merv = title.match(/^Merv\s+(\d+)\s+Pleated Air Filter/i);
   if (merv) {
@@ -170,11 +185,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
       }
       const filter = validation.data;
 
-      if (generateHandle(filter) !== product.handle) {
+      // Legacy handles are lowercase and duplicates carry numeric suffixes, so
+      // compare only the product family, not the full SKU. Pricing comes from
+      // the title, which is what the customer sees.
+      const familyPrefix =
+        filter.category === "merv"
+          ? `merv-${filter.quality}-pleated-air-filter-`
+          : `akf-${filter.category.replace(/_/g, "-")}-`;
+      if (!product.handle.toLowerCase().startsWith(familyPrefix)) {
         flagged.push({
           handle: product.handle,
           title: product.title,
-          reason: `Handle does not match the spec (expected ${generateHandle(filter)}); skipped`,
+          reason: `Handle does not look like a ${filter.category} product (expected prefix ${familyPrefix}); skipped`,
         });
         continue;
       }

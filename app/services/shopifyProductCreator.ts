@@ -388,21 +388,33 @@ export async function findOrCreateShopifyProduct(
     // onto every existing variant whenever it differs, so previously-created
     // products stay in sync with cost changes instead of selling at a stale,
     // potentially loss-making number forever.
+    //
+    // Increases only: a lookup must never lower a stored price. If the engine
+    // returns less than what is stored, the stored price may be a deliberate
+    // retail price, so it is logged and left alone for a human to review.
     const repriceUpdates: Array<{ id: string; price: string }> = [];
+    const shouldRaise = (label: string, current: string, expected: string): boolean => {
+      if (current === expected) return false;
+      if (Number(expected) > Number(current)) return true;
+      console.warn(
+        `[existing] ${handle} ${label}: calculated ${expected} is below stored ${current}; leaving unchanged`,
+      );
+      return false;
+    };
 
     if (filter.category === "merv") {
       const expectedTwelve = price.toFixed(2);
       const expectedFour = ((price / 12) * 4).toFixed(2);
 
-      if (variantsResult.twelve && variantsResult.twelve.price !== expectedTwelve) {
+      if (variantsResult.twelve && shouldRaise("12-pack", variantsResult.twelve.price, expectedTwelve)) {
         repriceUpdates.push({ id: variantsResult.twelve.id, price: expectedTwelve });
       }
-      if (variantsResult.four && variantsResult.four.price !== expectedFour) {
+      if (variantsResult.four && shouldRaise("4-pack", variantsResult.four.price, expectedFour)) {
         repriceUpdates.push({ id: variantsResult.four.id, price: expectedFour });
       }
     } else if (variantsResult.single) {
       const expectedSingle = price.toFixed(2);
-      if (variantsResult.single.price !== expectedSingle) {
+      if (shouldRaise("single", variantsResult.single.price, expectedSingle)) {
         repriceUpdates.push({ id: variantsResult.single.id, price: expectedSingle });
       }
     }
