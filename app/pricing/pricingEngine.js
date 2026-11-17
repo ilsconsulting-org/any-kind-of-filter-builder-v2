@@ -12,7 +12,7 @@ function getStaticCost(category) {
     case "pad":
       return 32;
     case "electro_perm_washable":
-      return 69;
+      return 98.57;
     case "practical_pleat":
       return 130;
     default:

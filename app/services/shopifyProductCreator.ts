@@ -380,6 +380,65 @@ export async function findOrCreateShopifyProduct(
       }
     }
 
+    // Reprice: everything above only adds missing variants — it never
+    // corrects price, so an existing product's stored Shopify price can
+    // drift indefinitely from the freshly calculated price (e.g. after a
+    // cost-matrix update like the FMI Jan 2026 revision, or a static-cost
+    // change like electro_perm_washable). Push the current calculated price
+    // onto every existing variant whenever it differs, so previously-created
+    // products stay in sync with cost changes instead of selling at a stale,
+    // potentially loss-making number forever.
+    const repriceUpdates: Array<{ id: string; price: string }> = [];
+
+    if (filter.category === "merv") {
+      const expectedTwelve = price.toFixed(2);
+      const expectedFour = ((price / 12) * 4).toFixed(2);
+
+      if (variantsResult.twelve && variantsResult.twelve.price !== expectedTwelve) {
+        repriceUpdates.push({ id: variantsResult.twelve.id, price: expectedTwelve });
+      }
+      if (variantsResult.four && variantsResult.four.price !== expectedFour) {
+        repriceUpdates.push({ id: variantsResult.four.id, price: expectedFour });
+      }
+    } else if (variantsResult.single) {
+      const expectedSingle = price.toFixed(2);
+      if (variantsResult.single.price !== expectedSingle) {
+        repriceUpdates.push({ id: variantsResult.single.id, price: expectedSingle });
+      }
+    }
+
+    if (repriceUpdates.length > 0) {
+      console.log(`[existing] Repricing ${handle}:`, JSON.stringify(repriceUpdates));
+      const repriceResp = await admin.graphql(
+        `#graphql
+          mutation repriceVariants($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+            productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+              productVariants { id price }
+              userErrors { field message }
+            }
+          }`,
+        { variables: { productId: existing.id, variants: repriceUpdates } },
+      );
+      const repriceJson = (await repriceResp.json()) as {
+        data?: {
+          productVariantsBulkUpdate?: {
+            productVariants: Array<{ id: string; price: string }>;
+            userErrors: Array<{ field: string[]; message: string }>;
+          };
+        };
+      };
+      const repriceErrs = repriceJson.data?.productVariantsBulkUpdate?.userErrors ?? [];
+      if (repriceErrs.length > 0) {
+        console.error(`[existing] Reprice errors for ${handle}:`, JSON.stringify(repriceErrs));
+      } else {
+        for (const v of repriceJson.data?.productVariantsBulkUpdate?.productVariants ?? []) {
+          if (variantsResult.twelve?.id === v.id) variantsResult.twelve.price = v.price;
+          if (variantsResult.four?.id === v.id) variantsResult.four.price = v.price;
+          if (variantsResult.single?.id === v.id) variantsResult.single.price = v.price;
+        }
+      }
+    }
+
     return {
       id: existing.id,
       handle: existing.handle,
