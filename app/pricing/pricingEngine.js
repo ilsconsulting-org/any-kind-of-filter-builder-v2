@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.server";
 import { calculateMervPrice } from "./mervPricing.js";
+import { sheetCostFor } from "./sheetCosts.js";
 
 /* -----------------------------
    STATIC COST ENGINE
@@ -68,6 +69,14 @@ export async function calculatePrice({
     const staticCost = getStaticCost(category);
     if (!staticCost) return null;
     finalPrice = staticCost / STATIC_RETAIL_DIVISOR;
+
+    // Floor rule: never below the flat retail above, and never below the
+    // size-specific FMI cost / 0.7. Large sizes whose cost exceeds the flat
+    // assumption are raised; no size is ever priced under the flat retail.
+    const sheetCost = sheetCostFor(category, { length, width, depth });
+    if (sheetCost != null) {
+      finalPrice = Math.max(finalPrice, sheetCost / STATIC_RETAIL_DIVISOR);
+    }
   }
 
   if (isSubscription) {
