@@ -5,6 +5,13 @@ import { calculateMervPrice } from "./mervPricing.js";
    STATIC COST ENGINE
 ----------------------------- */
 
+// Static categories carry a flat dealer COST. Retail is cost / 0.7, which is
+// what the live store already charges (practical pleat 185.71, pad and frame
+// 84.29). Flat costs are an interim approximation: the FMI sheet prices these
+// by size, so large sizes can carry thin margins. See the per-size pricing
+// follow-up.
+const STATIC_RETAIL_DIVISOR = 0.7;
+
 function getStaticCost(category) {
   switch (category) {
     case "padframe":
@@ -12,7 +19,7 @@ function getStaticCost(category) {
     case "pad":
       return 32;
     case "electro_perm_washable":
-      return 98.57;
+      return 69;
     case "practical_pleat":
       return 130;
     default:
@@ -60,7 +67,7 @@ export async function calculatePrice({
   } else {
     const staticCost = getStaticCost(category);
     if (!staticCost) return null;
-    finalPrice = staticCost;
+    finalPrice = staticCost / STATIC_RETAIL_DIVISOR;
   }
 
   if (isSubscription) {
